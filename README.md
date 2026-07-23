@@ -40,7 +40,7 @@ npm install
 npm i -g vercel   # 未インストールの場合
 vercel link       # 初回のみ、プロジェクトと紐付け
 vercel env pull .env.local
-vercel dev
+vercel dev        # npm run ではなく直接実行する(再帰呼び出し防止のため)
 ```
 
 ## 5. デプロイ
