@@ -132,9 +132,12 @@
   .modal-box {
     position: relative; background: var(--panel); border-radius: 10px;
     padding: 16px; max-width: min(90vw, 900px); max-height: 90vh;
-    display: flex; align-items: center; justify-content: center;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
   }
-  .modal-box img { max-width: 100%; max-height: 80vh; border-radius: 6px; display: block; }
+  .modal-box img { max-width: 100%; max-height: 70vh; border-radius: 6px; display: block; }
+  .modal-nav { display: flex; align-items: center; justify-content: center; gap: 14px; }
+  .modal-nav button { margin-top: 0; }
+  .modal-nav-label { font-size: 13px; color: var(--muted); min-width: 60px; text-align: center; }
   .modal-close {
     position: absolute; top: -14px; right: -14px; margin-top: 0;
     width: 32px; height: 32px; padding: 0; border-radius: 50%;
@@ -212,6 +215,11 @@
       <img id="modalImage" alt="" />
       <div class="modal-fallback" id="modalFallback" style="display:none;">
         このブラウザではプレビューできません(HEIC等)。<a id="modalOpenLink" href="#" target="_blank" rel="noopener">新しいタブで開く</a>
+      </div>
+      <div class="modal-nav">
+        <button type="button" id="modalPrevBtn" class="secondary-btn">← 前の画像</button>
+        <span class="modal-nav-label" id="modalNavLabel"></span>
+        <button type="button" id="modalNextBtn" class="secondary-btn">次の画像 →</button>
       </div>
     </div>
   </div>

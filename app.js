@@ -30,6 +30,9 @@ const modalImage = document.getElementById('modalImage');
 const modalFallback = document.getElementById('modalFallback');
 const modalOpenLink = document.getElementById('modalOpenLink');
 const modalCloseBtn = document.getElementById('modalCloseBtn');
+const modalPrevBtn = document.getElementById('modalPrevBtn');
+const modalNextBtn = document.getElementById('modalNextBtn');
+const modalNavLabel = document.getElementById('modalNavLabel');
 
 const MAX_DIMENSION = 1800;
 const JPEG_QUALITY = 0.85;
@@ -37,17 +40,29 @@ const JPEG_QUALITY = 0.85;
 const CONCURRENCY = 4;
 const PAGE_SIZE = 20;
 
-function openImageModal(url) {
+// currentFiltered(検索結果全体)の中でのインデックス。モーダル内の前へ/次へで使う。
+let currentModalIndex = -1;
+
+function openImageModalByIndex(index) {
+  const doc = currentFiltered[index];
+  if (!doc || !doc.image_url) return;
+  currentModalIndex = index;
+
   modalImage.style.display = '';
   modalFallback.style.display = 'none';
-  modalOpenLink.href = url;
-  modalImage.src = url;
+  modalOpenLink.href = doc.image_url;
+  modalImage.src = doc.image_url;
   imageModal.classList.add('open');
+
+  modalNavLabel.textContent = `${index + 1} / ${currentFiltered.length}`;
+  modalPrevBtn.disabled = index <= 0;
+  modalNextBtn.disabled = index >= currentFiltered.length - 1;
 }
 
 function closeImageModal() {
   imageModal.classList.remove('open');
   modalImage.src = '';
+  currentModalIndex = -1;
 }
 
 modalImage.addEventListener('error', () => {
@@ -59,8 +74,17 @@ modalCloseBtn.addEventListener('click', closeImageModal);
 imageModal.addEventListener('click', (e) => {
   if (e.target === imageModal) closeImageModal();
 });
+modalPrevBtn.addEventListener('click', () => {
+  if (currentModalIndex > 0) openImageModalByIndex(currentModalIndex - 1);
+});
+modalNextBtn.addEventListener('click', () => {
+  if (currentModalIndex < currentFiltered.length - 1) openImageModalByIndex(currentModalIndex + 1);
+});
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && imageModal.classList.contains('open')) closeImageModal();
+  if (!imageModal.classList.contains('open')) return;
+  if (e.key === 'Escape') closeImageModal();
+  if (e.key === 'ArrowLeft' && currentModalIndex > 0) openImageModalByIndex(currentModalIndex - 1);
+  if (e.key === 'ArrowRight' && currentModalIndex < currentFiltered.length - 1) openImageModalByIndex(currentModalIndex + 1);
 });
 
 // { file: File, handle: FileSystemFileHandle|null }[]
@@ -394,7 +418,7 @@ function renderDocuments() {
   docTableBody.innerHTML = '';
   emptyMsg.style.display = pageDocs.length === 0 ? 'block' : 'none';
 
-  pageDocs.forEach((doc) => {
+  pageDocs.forEach((doc, i) => {
     const tr = document.createElement('tr');
     const maskedNote = doc.inspection_amount_masked
       ? '<span class="masked">(定額)</span>'
@@ -402,7 +426,7 @@ function renderDocuments() {
     if (doc.image_url) {
       tr.classList.add('clickable-row');
       tr.title = '画像を表示';
-      tr.addEventListener('click', () => openImageModal(doc.image_url));
+      tr.addEventListener('click', () => openImageModalByIndex(start + i));
     }
     tr.innerHTML = `
       <td>${codeSummary(doc)}</td>
