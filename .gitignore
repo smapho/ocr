@@ -13,3 +13,5 @@ node_modules/
 *.heif
 *.pdf
 !public/**
+.vercel
+.env*
