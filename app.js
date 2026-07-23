@@ -4,9 +4,14 @@ const fileList = document.getElementById('fileList');
 const ingestBtn = document.getElementById('ingestBtn');
 const docTableBody = document.getElementById('docTableBody');
 const emptyMsg = document.getElementById('emptyMsg');
+const progressWrap = document.getElementById('progressWrap');
+const progressFill = document.getElementById('progressFill');
+const progressLabel = document.getElementById('progressLabel');
 
 const MAX_DIMENSION = 1800;
 const JPEG_QUALITY = 0.85;
+// 同時に処理するファイル数。増やすほど速いがGemini/Supabaseへの同時リクエストが増える
+const CONCURRENCY = 4;
 
 let selectedFiles = [];
 
@@ -23,8 +28,18 @@ drop.addEventListener('drop', (e) => {
 });
 fileInput.addEventListener('change', () => handleFiles(fileInput.files));
 
+function isImageFile(file) {
+  if (file.type.startsWith('image/')) return true;
+  // HEIC/HEIFはブラウザ・OSによって type が空文字になることがあるため拡張子でも判定する
+  return /\.(heic|heif)$/i.test(file.name);
+}
+
+function isHeic(file) {
+  return /image\/hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(file.name);
+}
+
 function handleFiles(fileListInput) {
-  selectedFiles = Array.from(fileListInput).filter((f) => f.type.startsWith('image/'));
+  selectedFiles = Array.from(fileListInput).filter(isImageFile);
   renderFileList();
   ingestBtn.disabled = selectedFiles.length === 0;
 }
@@ -48,7 +63,12 @@ function setFileStatus(i, status, label) {
 }
 
 // 画像を最大辺 MAX_DIMENSION に縮小し、base64(JPEG)に変換する
-function resizeToBase64(file) {
+async function resizeToBase64(file) {
+  // HEIC/HEIFはブラウザのcanvasで直接デコードできないため、先にJPEGへ変換する
+  const source = isHeic(file)
+    ? await window.heic2any({ blob: file, toType: 'image/jpeg', quality: JPEG_QUALITY })
+    : file;
+
   return new Promise((resolve, reject) => {
     const img = new Image();
     const reader = new FileReader();
@@ -68,30 +88,59 @@ function resizeToBase64(file) {
       img.src = e.target.result;
     };
     reader.onerror = reject;
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(source);
   });
+}
+
+function updateProgress(done, total) {
+  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+  progressFill.style.width = `${pct}%`;
+  progressLabel.textContent = `${done} / ${total} 完了 (${pct}%)`;
+}
+
+async function processOne(i) {
+  const file = selectedFiles[i];
+  setFileStatus(i, 'processing', '処理中');
+  try {
+    const imageBase64 = await resizeToBase64(file);
+    const res = await fetch('/api/ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName: file.name, mimeType: 'image/jpeg', imageBase64 }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || '取り込みに失敗しました');
+    setFileStatus(i, 'done', '完了');
+  } catch (err) {
+    console.error(err);
+    setFileStatus(i, 'error', 'エラー');
+  }
+}
+
+// 最大 CONCURRENCY 件を同時に処理するワーカープール。
+// 1件ずつ順番に待つより大幅に速くなる。
+async function runPool(total, worker) {
+  let next = 0;
+  let done = 0;
+  updateProgress(0, total);
+
+  async function runWorker() {
+    while (next < total) {
+      const i = next++;
+      await worker(i);
+      done++;
+      updateProgress(done, total);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(CONCURRENCY, total) }, runWorker);
+  await Promise.all(workers);
 }
 
 ingestBtn.addEventListener('click', async () => {
   ingestBtn.disabled = true;
-  for (let i = 0; i < selectedFiles.length; i++) {
-    const file = selectedFiles[i];
-    setFileStatus(i, 'processing', '処理中');
-    try {
-      const imageBase64 = await resizeToBase64(file);
-      const res = await fetch('/api/ingest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileName: file.name, mimeType: 'image/jpeg', imageBase64 }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || '取り込みに失敗しました');
-      setFileStatus(i, 'done', '完了');
-    } catch (err) {
-      console.error(err);
-      setFileStatus(i, 'error', 'エラー');
-    }
-  }
+  progressWrap.style.display = 'block';
+  await runPool(selectedFiles.length, processOne);
   await loadDocuments();
   ingestBtn.disabled = false;
 });

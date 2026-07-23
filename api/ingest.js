@@ -78,22 +78,31 @@ export default async function handler(req, res) {
       throw new Error('GEMINI_API_KEY が設定されていません');
     }
 
-    const geminiRes = await fetch(`${GEMINI_URL}?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: PROMPT }, { inlineData: { mimeType, data: imageBase64 } }],
+    const storagePath = `${Date.now()}_${fileName}`.replace(/\s+/g, '_');
+    const buffer = Buffer.from(imageBase64, 'base64');
+
+    // GeminiでのOCRとStorageへの原本保存は互いに依存しないため並行実行して待ち時間を短縮する
+    const [geminiRes, uploadResult] = await Promise.all([
+      fetch(`${GEMINI_URL}?key=${process.env.GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: PROMPT }, { inlineData: { mimeType, data: imageBase64 } }],
+            },
+          ],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: RESPONSE_SCHEMA,
           },
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: RESPONSE_SCHEMA,
-        },
+        }),
       }),
-    });
+      supabase.storage.from('ocr-images').upload(storagePath, buffer, { contentType: mimeType, upsert: false }),
+    ]);
+
+    if (uploadResult.error) throw new Error(`Storageへの保存に失敗しました: ${uploadResult.error.message}`);
 
     if (!geminiRes.ok) {
       const errText = await geminiRes.text();
@@ -111,13 +120,6 @@ export default async function handler(req, res) {
     const isMasked = rawInspection === '' || /^[*＊]+$/.test(rawInspection);
     const preApprovedAmount = toIntOrNull(extracted.pre_approved_amount);
     const inspectionAmount = isMasked ? preApprovedAmount : toIntOrNull(rawInspection);
-
-    const storagePath = `${Date.now()}_${fileName}`.replace(/\s+/g, '_');
-    const buffer = Buffer.from(imageBase64, 'base64');
-    const { error: uploadError } = await supabase.storage
-      .from('ocr-images')
-      .upload(storagePath, buffer, { contentType: mimeType, upsert: false });
-    if (uploadError) throw new Error(`Storageへの保存に失敗しました: ${uploadError.message}`);
 
     const { data: inserted, error: insertError } = await supabase
       .from('ocr_documents')
