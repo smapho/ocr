@@ -50,24 +50,37 @@ function renderFileList() {
     const row = document.createElement('div');
     row.className = 'file-row';
     row.id = `file-row-${i}`;
-    row.innerHTML = `<span class="name">${file.name}</span><span class="badge pending" id="file-badge-${i}">待機中</span>`;
+    row.innerHTML = `
+      <span class="name">${file.name}</span>
+      <span class="badge pending" id="file-badge-${i}">待機中</span>
+      <span class="file-error" id="file-error-${i}"></span>
+    `;
     fileList.appendChild(row);
   });
 }
 
-function setFileStatus(i, status, label) {
+function setFileStatus(i, status, label, errorDetail) {
   const badge = document.getElementById(`file-badge-${i}`);
-  if (!badge) return;
-  badge.className = `badge ${status}`;
-  badge.textContent = label;
+  if (badge) {
+    badge.className = `badge ${status}`;
+    badge.textContent = label;
+  }
+  const errorEl = document.getElementById(`file-error-${i}`);
+  if (errorEl) errorEl.textContent = errorDetail || '';
 }
 
 // 画像を最大辺 MAX_DIMENSION に縮小し、base64(JPEG)に変換する
 async function resizeToBase64(file) {
-  // HEIC/HEIFはブラウザのcanvasで直接デコードできないため、先にJPEGへ変換する
-  const source = isHeic(file)
-    ? await window.heic2any({ blob: file, toType: 'image/jpeg', quality: JPEG_QUALITY })
-    : file;
+  let source = file;
+  if (isHeic(file)) {
+    if (typeof window.heic2any !== 'function') {
+      throw new Error('HEIC変換ライブラリの読み込みに失敗しました(通信環境を確認してください)');
+    }
+    // HEIC/HEIFはブラウザのcanvasで直接デコードできないため、先にJPEGへ変換する
+    const converted = await window.heic2any({ blob: file, toType: 'image/jpeg', quality: JPEG_QUALITY });
+    // Live Photo等、複数画像を含むHEICでは配列が返ることがあるため先頭を使う
+    source = Array.isArray(converted) ? converted[0] : converted;
+  }
 
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -113,7 +126,7 @@ async function processOne(i) {
     setFileStatus(i, 'done', '完了');
   } catch (err) {
     console.error(err);
-    setFileStatus(i, 'error', 'エラー');
+    setFileStatus(i, 'error', 'エラー', err.message || String(err));
   }
 }
 
