@@ -1,0 +1,15 @@
+node_modules/
+.vercel/
+.env
+.env.local
+.DS_Store
+
+# サンプル・取り込み対象の画像は機密情報を含む可能性があるため、
+# このリポジトリには絶対にコミットしない
+*.jpg
+*.jpeg
+*.png
+*.heic
+*.heif
+*.pdf
+!public/**

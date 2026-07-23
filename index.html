@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>経費検収書 OCR取り込み</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --border: #dcdfe4;
+    --text: #1c1f24;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --ok: #16a34a;
+    --warn: #b45309;
+    --err: #dc2626;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --panel: #1d2025;
+      --border: #33373e;
+      --text: #e7e9ec;
+      --muted: #9aa1ac;
+      --accent: #3b82f6;
+      --accent-hover: #60a5fa;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.sub { color: var(--muted); margin: 0 0 20px; font-size: 13px; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .drop {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    text-align: center;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .drop.dragover { border-color: var(--accent); color: var(--accent); }
+  input[type="file"] { display: none; }
+  .file-list { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .file-row {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; padding: 6px 8px; border-radius: 6px;
+    background: var(--bg);
+  }
+  .file-row .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; }
+  .badge.pending { background: #e5e7eb; color: #374151; }
+  .badge.processing { background: #dbeafe; color: #1e40af; }
+  .badge.done { background: #dcfce7; color: var(--ok); }
+  .badge.error { background: #fee2e2; color: var(--err); }
+  button {
+    background: var(--accent); color: #fff; border: none;
+    padding: 10px 20px; border-radius: 6px; font-size: 14px;
+    cursor: pointer; margin-top: 16px;
+  }
+  button:hover { background: var(--accent-hover); }
+  button:disabled { background: #9ca3af; cursor: not-allowed; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .masked { color: var(--warn); font-size: 12px; display: block; }
+  .thumb { width: 48px; height: 48px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
+  .table-wrap { overflow-x: auto; }
+  .empty { color: var(--muted); font-size: 13px; padding: 12px 0; }
+</style>
+</head>
+<body>
+  <h1>経費検収書 OCR取り込み</h1>
+  <p class="sub">画像を選択して「取り込み実行」を押すと、Geminiが内容を読み取りSupabaseへ格納します。検収金額がマスクされている場合は事前承認金額を採用します。</p>
+
+  <div class="panel">
+    <div class="drop" id="drop">
+      画像をドラッグ&ドロップ、またはクリックして選択(複数選択可)
+    </div>
+    <input type="file" id="fileInput" accept="image/*" multiple />
+    <div class="file-list" id="fileList"></div>
+    <button id="ingestBtn" disabled>取り込み実行</button>
+  </div>
+
+  <div class="panel">
+    <h2 style="font-size:15px; margin-top:0;">格納済みデータ</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>画像</th>
+            <th>対象年月</th>
+            <th>取引先</th>
+            <th>経費項目</th>
+            <th>事前承認金額</th>
+            <th>検収金額</th>
+            <th>変更理由(手書き)</th>
+            <th>承認NO</th>
+          </tr>
+        </thead>
+        <tbody id="docTableBody"></tbody>
+      </table>
+      <div class="empty" id="emptyMsg" style="display:none;">まだデータがありません</div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
