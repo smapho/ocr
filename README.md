@@ -4,9 +4,11 @@
 「検収金額」欄が `*********` のようにマスクされている場合は、「事前承認金額」を代わりに採用します(手書き文字も読み取り対象)。
 
 - フロントエンド: `index.html` + `app.js`(素のHTML/JS、フレームワークなし)
-- バックエンド: Vercel Functions(`api/ingest.js`, `api/documents.js`)
-- OCR: Google AI Studio の Gemini API
+- バックエンド: Vercel Functions(`api/upload-url.js`, `api/ingest.js`, `api/documents.js`)
+- OCR: Google AI Studio の Gemini API(`image/heic`・`image/heif` もネイティブ対応)
 - データ格納: Supabase(Postgres + Storage)
+
+画像本体はブラウザから `api/upload-url` で発行した署名付きURLを使って直接Supabase Storageへアップロードする(Vercel Functionsのリクエストサイズ上限を回避するため)。`api/ingest` はStorageから画像を取得してGeminiに渡すのみを担当する。
 
 ## 1. Gemini APIキーの取得
 
@@ -51,12 +53,21 @@ vercel --prod
 
 ## 使い方
 
+### フォルダを選択する場合(推奨・Chrome/Edgeのみ)
+
 1. デプロイしたURL(またはローカルの `vercel dev`)を開く
-2. OCR対象の画像をドラッグ&ドロップ、またはクリックして複数選択
-3. 「取り込み実行」を押すと、1枚ずつ Gemini でOCR → Supabase Storageに原本保存 → `ocr_documents` テーブルに格納される
-4. 下の一覧に格納結果が表示される。検収金額がマスクされていた行には注記が表示される
+2. 「📁 フォルダを選択(取り込み後に自動移動)」を押し、OCR対象画像が入ったフォルダを選ぶ
+3. 「取り込み実行」を押すと、最大4枚を同時にGeminiでOCR → Supabase Storageへ原本保存 → `ocr_documents` テーブルに格納される
+4. 成功したファイルは選択したフォルダ内の「取り込み済み」サブフォルダへ自動的に移動される(次回フォルダを選び直しても二重に取り込まれない)
+
+### 個別ファイル選択の場合(全ブラウザ対応・自動移動なし)
+
+画像をドラッグ&ドロップ、またはクリックして複数選択して取り込む。この方法では処理後の自動移動は行われないため、同じファイルを選び直すと重複して取り込まれる点に注意。
+
+下の一覧には格納結果が表示される。検収金額がマスクされていた行には「(定額)」の注記が表示される。
 
 ## 注意
 
 - 画像には実際の取引先名・銀行口座・承認番号などの機密情報が含まれる可能性があります。このリポジトリはpublicのため、サンプル画像や実データの画像ファイルは絶対にコミットしないでください(`.gitignore` で拡張子ベースに除外済み)。
 - `SUPABASE_SERVICE_ROLE_KEY` はRLSを無視できる強い権限を持つため、Vercelの環境変数以外の場所(フロントエンドのコードなど)には絶対に置かないでください。
+- `app.js` 内の `SUPABASE_PUBLISHABLE_KEY` は公開して問題ない値(旧anonキー相当)。署名付きアップロードURLの実行にのみ使われ、RLSで保護されたテーブル/バケットへの直接アクセス権は持たない。

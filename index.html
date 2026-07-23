@@ -46,6 +46,9 @@
     padding: 20px;
     margin-bottom: 20px;
   }
+  .pick-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .pick-row button { margin-top: 0; }
+  .pick-note { font-size: 12px; color: var(--muted); }
   .drop {
     border: 2px dashed var(--border);
     border-radius: 8px;
@@ -65,6 +68,7 @@
   .file-row { flex-wrap: wrap; }
   .file-row .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .file-error { flex-basis: 100%; font-size: 12px; color: var(--err); }
+  .file-note { flex-basis: 100%; font-size: 12px; color: var(--muted); }
   .badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; }
   .badge.pending { background: #e5e7eb; color: #374151; }
   .badge.processing { background: #dbeafe; color: #1e40af; }
@@ -106,8 +110,12 @@
   <p class="sub">画像を選択して「取り込み実行」を押すと、Geminiが内容を読み取りSupabaseへ格納します。検収金額がマスクされている場合は事前承認金額を採用します。</p>
 
   <div class="panel">
+    <div class="pick-row">
+      <button id="dirPickBtn" type="button">📁 フォルダを選択(取り込み後に自動移動)</button>
+      <span class="pick-note" id="dirSupportNote"></span>
+    </div>
     <div class="drop" id="drop">
-      画像をドラッグ&ドロップ、またはクリックして選択(複数選択可・HEIC対応)
+      画像をドラッグ&ドロップ、またはクリックして選択(複数選択可・HEIC対応・自動移動なし)
     </div>
     <input type="file" id="fileInput" accept="image/*,.heic,.heif" multiple />
     <div class="file-list" id="fileList"></div>
@@ -140,6 +148,6 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

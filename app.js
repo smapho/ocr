@@ -1,5 +1,16 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// 公開して問題ない値(publishableキー)。署名付きアップロードURLの実行にのみ使う。
+const SUPABASE_URL = 'https://nfpqqcqlcgegjuptmwiw.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_jPwnFWwg6oP9CmiMVN9IHA_yR0_Ts-g';
+const supabaseClient = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+const PROCESSED_DIR_NAME = '取り込み済み';
+
 const fileInput = document.getElementById('fileInput');
 const drop = document.getElementById('drop');
+const dirPickBtn = document.getElementById('dirPickBtn');
+const dirSupportNote = document.getElementById('dirSupportNote');
 const fileList = document.getElementById('fileList');
 const ingestBtn = document.getElementById('ingestBtn');
 const docTableBody = document.getElementById('docTableBody');
@@ -13,7 +24,16 @@ const JPEG_QUALITY = 0.85;
 // 同時に処理するファイル数。増やすほど速いがGemini/Supabaseへの同時リクエストが増える
 const CONCURRENCY = 4;
 
+// { file: File, handle: FileSystemFileHandle|null }[]
+// handle があるものはフォルダ選択経由で読み込まれたファイルで、成功後に自動移動できる。
 let selectedFiles = [];
+let sourceDirHandle = null;
+
+const supportsDirectoryPicker = typeof window.showDirectoryPicker === 'function';
+if (!supportsDirectoryPicker) {
+  dirPickBtn.disabled = true;
+  dirSupportNote.textContent = 'このブラウザは未対応です(Chrome/Edgeでご利用ください)';
+}
 
 drop.addEventListener('click', () => fileInput.click());
 drop.addEventListener('dragover', (e) => {
@@ -24,36 +44,65 @@ drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
 drop.addEventListener('drop', (e) => {
   e.preventDefault();
   drop.classList.remove('dragover');
-  handleFiles(e.dataTransfer.files);
+  sourceDirHandle = null;
+  setFilesFromFileList(e.dataTransfer.files);
 });
-fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+fileInput.addEventListener('change', () => {
+  sourceDirHandle = null;
+  setFilesFromFileList(fileInput.files);
+});
+
+dirPickBtn.addEventListener('click', async () => {
+  try {
+    const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    const entries = [];
+    for await (const [name, handle] of dirHandle.entries()) {
+      if (handle.kind === 'file' && isImageName(name)) {
+        entries.push({ file: await handle.getFile(), handle });
+      }
+    }
+    sourceDirHandle = dirHandle;
+    selectedFiles = entries;
+    renderFileList();
+    ingestBtn.disabled = selectedFiles.length === 0;
+  } catch (err) {
+    // ユーザーがダイアログをキャンセルした場合などは何もしない
+    if (err.name !== 'AbortError') console.error(err);
+  }
+});
+
+function isImageName(name) {
+  return /\.(jpe?g|png|webp|heic|heif)$/i.test(name);
+}
 
 function isImageFile(file) {
   if (file.type.startsWith('image/')) return true;
-  // HEIC/HEIFはブラウザ・OSによって type が空文字になることがあるため拡張子でも判定する
-  return /\.(heic|heif)$/i.test(file.name);
+  return isImageName(file.name);
 }
 
 function isHeic(file) {
   return /image\/hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(file.name);
 }
 
-function handleFiles(fileListInput) {
-  selectedFiles = Array.from(fileListInput).filter(isImageFile);
+function setFilesFromFileList(fileListInput) {
+  selectedFiles = Array.from(fileListInput)
+    .filter(isImageFile)
+    .map((file) => ({ file, handle: null }));
   renderFileList();
   ingestBtn.disabled = selectedFiles.length === 0;
 }
 
 function renderFileList() {
   fileList.innerHTML = '';
-  selectedFiles.forEach((file, i) => {
+  selectedFiles.forEach((entry, i) => {
     const row = document.createElement('div');
     row.className = 'file-row';
     row.id = `file-row-${i}`;
     row.innerHTML = `
-      <span class="name">${file.name}</span>
+      <span class="name">${entry.file.name}</span>
       <span class="badge pending" id="file-badge-${i}">待機中</span>
       <span class="file-error" id="file-error-${i}"></span>
+      <span class="file-note" id="file-note-${i}"></span>
     `;
     fileList.appendChild(row);
   });
@@ -69,6 +118,11 @@ function setFileStatus(i, status, label, errorDetail) {
   if (errorEl) errorEl.textContent = errorDetail || '';
 }
 
+function setFileNote(i, note) {
+  const noteEl = document.getElementById(`file-note-${i}`);
+  if (noteEl) noteEl.textContent = note || '';
+}
+
 function readAsBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -78,7 +132,7 @@ function readAsBase64(file) {
   });
 }
 
-// アップロード用データを準備する。
+// アップロード用のファイル本体(Blob)とmimeTypeを準備する。
 // HEIC/HEIFはブラウザのcanvasで直接デコードできず変換ライブラリも一部の
 // バリエーション(HDR gain map付きなど)に対応できないため、変換せず
 // 生のまま送る(Gemini APIはimage/heic・image/heifをネイティブにサポートしている)。
@@ -86,7 +140,7 @@ function readAsBase64(file) {
 async function prepareUpload(file) {
   if (isHeic(file)) {
     const mimeType = /\.heif$/i.test(file.name) ? 'image/heif' : 'image/heic';
-    return { mimeType, imageBase64: await readAsBase64(file) };
+    return { mimeType, blob: file };
   }
 
   return new Promise((resolve, reject) => {
@@ -101,8 +155,7 @@ async function prepareUpload(file) {
         canvas.width = w;
         canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
-        resolve({ mimeType: 'image/jpeg', imageBase64: dataUrl.split(',')[1] });
+        canvas.toBlob((blob) => resolve({ mimeType: 'image/jpeg', blob }), 'image/jpeg', JPEG_QUALITY);
       };
       img.onerror = reject;
       img.src = e.target.result;
@@ -118,19 +171,60 @@ function updateProgress(done, total) {
   progressLabel.textContent = `${done} / ${total} 完了 (${pct}%)`;
 }
 
+// 処理が終わった元ファイルを、選択元フォルダ内の「取り込み済み」サブフォルダへ移動する。
+// フォルダ選択(File System Access API)経由の場合のみ実行可能。
+async function moveToProcessedFolder(name) {
+  if (!sourceDirHandle) return false;
+  const processedDir = await sourceDirHandle.getDirectoryHandle(PROCESSED_DIR_NAME, { create: true });
+  const srcHandle = await sourceDirHandle.getFileHandle(name);
+  const file = await srcHandle.getFile();
+  const destName = `${Date.now()}_${name}`;
+  const destHandle = await processedDir.getFileHandle(destName, { create: true });
+  const writable = await destHandle.createWritable();
+  await writable.write(await file.arrayBuffer());
+  await writable.close();
+  await sourceDirHandle.removeEntry(name);
+  return true;
+}
+
 async function processOne(i) {
-  const file = selectedFiles[i];
+  const { file, handle } = selectedFiles[i];
   setFileStatus(i, 'processing', '処理中');
   try {
-    const { mimeType, imageBase64 } = await prepareUpload(file);
+    const { mimeType, blob } = await prepareUpload(file);
+
+    const urlRes = await fetch('/api/upload-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName: file.name }),
+    });
+    const urlJson = await urlRes.json();
+    if (!urlRes.ok) throw new Error(urlJson.error || 'アップロードURLの発行に失敗しました');
+    const { storagePath, token } = urlJson;
+
+    const { error: uploadError } = await supabaseClient.storage
+      .from('ocr-images')
+      .uploadToSignedUrl(storagePath, token, blob, { contentType: mimeType });
+    if (uploadError) throw new Error(`アップロードに失敗しました: ${uploadError.message}`);
+
     const res = await fetch('/api/ingest', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileName: file.name, mimeType, imageBase64 }),
+      body: JSON.stringify({ fileName: file.name, mimeType, storagePath }),
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || '取り込みに失敗しました');
     setFileStatus(i, 'done', '完了');
+
+    if (handle) {
+      try {
+        await moveToProcessedFolder(file.name);
+        setFileNote(i, `「${PROCESSED_DIR_NAME}」フォルダへ移動しました`);
+      } catch (moveErr) {
+        console.error(moveErr);
+        setFileNote(i, 'データは格納済みですが、フォルダの移動に失敗しました');
+      }
+    }
   } catch (err) {
     console.error(err);
     setFileStatus(i, 'error', 'エラー', err.message || String(err));
@@ -180,7 +274,7 @@ async function loadDocuments() {
   docs.forEach((doc) => {
     const tr = document.createElement('tr');
     const maskedNote = doc.inspection_amount_masked
-      ? '<span class="masked">(マスクのため事前承認金額を採用)</span>'
+      ? '<span class="masked">(定額)</span>'
       : '';
     tr.innerHTML = `
       <td>${doc.image_url ? `<img class="thumb" src="${doc.image_url}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'thumb-fallback',textContent:'📄'}))" />` : '-'}</td>
