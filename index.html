@@ -120,6 +120,29 @@
   }
   .table-wrap { overflow-x: auto; }
   .empty { color: var(--muted); font-size: 13px; padding: 12px 0; }
+  .pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 16px; }
+  .pager button { margin-top: 0; }
+  .pager-label { font-size: 13px; color: var(--muted); }
+  .modal-overlay {
+    display: none;
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6);
+    align-items: center; justify-content: center; z-index: 1000; padding: 24px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    position: relative; background: var(--panel); border-radius: 10px;
+    padding: 16px; max-width: min(90vw, 900px); max-height: 90vh;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .modal-box img { max-width: 100%; max-height: 80vh; border-radius: 6px; display: block; }
+  .modal-close {
+    position: absolute; top: -14px; right: -14px; margin-top: 0;
+    width: 32px; height: 32px; padding: 0; border-radius: 50%;
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    font-size: 16px; line-height: 1; display: flex; align-items: center; justify-content: center;
+  }
+  .modal-close:hover { background: var(--err); color: #fff; border-color: var(--err); }
+  .modal-fallback { font-size: 13px; color: var(--muted); padding: 20px; text-align: center; }
 </style>
 </head>
 <body>
@@ -175,6 +198,21 @@
         <tbody id="docTableBody"></tbody>
       </table>
       <div class="empty" id="emptyMsg" style="display:none;">まだデータがありません</div>
+    </div>
+    <div class="pager">
+      <button type="button" id="prevPageBtn" class="secondary-btn">← 戻る</button>
+      <span class="pager-label" id="pagerLabel">1 / 1 ページ</span>
+      <button type="button" id="nextPageBtn" class="secondary-btn">次へ →</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="imageModal">
+    <div class="modal-box">
+      <button type="button" class="modal-close" id="modalCloseBtn">✕</button>
+      <img id="modalImage" alt="" />
+      <div class="modal-fallback" id="modalFallback" style="display:none;">
+        このブラウザではプレビューできません(HEIC等)。<a id="modalOpenLink" href="#" target="_blank" rel="noopener">新しいタブで開く</a>
+      </div>
     </div>
   </div>
 

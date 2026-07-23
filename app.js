@@ -22,11 +22,46 @@ const searchVendor = document.getElementById('searchVendor');
 const searchDueDate = document.getElementById('searchDueDate');
 const searchApprovalNo = document.getElementById('searchApprovalNo');
 const searchClearBtn = document.getElementById('searchClearBtn');
+const prevPageBtn = document.getElementById('prevPageBtn');
+const nextPageBtn = document.getElementById('nextPageBtn');
+const pagerLabel = document.getElementById('pagerLabel');
+const imageModal = document.getElementById('imageModal');
+const modalImage = document.getElementById('modalImage');
+const modalFallback = document.getElementById('modalFallback');
+const modalOpenLink = document.getElementById('modalOpenLink');
+const modalCloseBtn = document.getElementById('modalCloseBtn');
 
 const MAX_DIMENSION = 1800;
 const JPEG_QUALITY = 0.85;
 // 同時に処理するファイル数。増やすほど速いがGemini/Supabaseへの同時リクエストが増える
 const CONCURRENCY = 4;
+const PAGE_SIZE = 20;
+
+function openImageModal(url) {
+  modalImage.style.display = '';
+  modalFallback.style.display = 'none';
+  modalOpenLink.href = url;
+  modalImage.src = url;
+  imageModal.classList.add('open');
+}
+
+function closeImageModal() {
+  imageModal.classList.remove('open');
+  modalImage.src = '';
+}
+
+modalImage.addEventListener('error', () => {
+  if (!modalImage.src) return;
+  modalImage.style.display = 'none';
+  modalFallback.style.display = 'block';
+});
+modalCloseBtn.addEventListener('click', closeImageModal);
+imageModal.addEventListener('click', (e) => {
+  if (e.target === imageModal) closeImageModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && imageModal.classList.contains('open')) closeImageModal();
+});
 
 // { file: File, handle: FileSystemFileHandle|null }[]
 // handle があるものはフォルダ選択経由で読み込まれたファイルで、成功後に自動移動できる。
@@ -297,20 +332,23 @@ async function deleteDocument(id) {
 }
 
 let allDocuments = [];
+let currentFiltered = [];
+let currentPage = 1;
 
 function applyFilters() {
   const vendorQuery = searchVendor.value.trim().toLowerCase();
   const approvalQuery = searchApprovalNo.value.trim().toLowerCase();
   const dueDate = searchDueDate.value;
 
-  const filtered = allDocuments.filter((doc) => {
+  currentFiltered = allDocuments.filter((doc) => {
     if (vendorQuery && !(doc.vendor_name || '').toLowerCase().includes(vendorQuery)) return false;
     if (approvalQuery && !(doc.approval_no || '').toLowerCase().includes(approvalQuery)) return false;
     if (dueDate && doc.payment_due_date !== dueDate) return false;
     return true;
   });
 
-  renderDocuments(filtered);
+  currentPage = 1;
+  renderDocuments();
 }
 
 [searchVendor, searchApprovalNo].forEach((el) => el.addEventListener('input', applyFilters));
@@ -322,6 +360,20 @@ searchClearBtn.addEventListener('click', () => {
   applyFilters();
 });
 
+prevPageBtn.addEventListener('click', () => {
+  if (currentPage > 1) {
+    currentPage--;
+    renderDocuments();
+  }
+});
+nextPageBtn.addEventListener('click', () => {
+  const totalPages = Math.max(1, Math.ceil(currentFiltered.length / PAGE_SIZE));
+  if (currentPage < totalPages) {
+    currentPage++;
+    renderDocuments();
+  }
+});
+
 async function loadDocuments() {
   const res = await fetch('/api/documents');
   const json = await res.json();
@@ -329,19 +381,28 @@ async function loadDocuments() {
   applyFilters();
 }
 
-function renderDocuments(docs) {
-  docTableBody.innerHTML = '';
-  emptyMsg.style.display = docs.length === 0 ? 'block' : 'none';
+function renderDocuments() {
+  const totalPages = Math.max(1, Math.ceil(currentFiltered.length / PAGE_SIZE));
+  currentPage = Math.min(currentPage, totalPages);
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const pageDocs = currentFiltered.slice(start, start + PAGE_SIZE);
 
-  docs.forEach((doc) => {
+  pagerLabel.textContent = `${currentPage} / ${totalPages} ページ(全${currentFiltered.length}件)`;
+  prevPageBtn.disabled = currentPage <= 1;
+  nextPageBtn.disabled = currentPage >= totalPages;
+
+  docTableBody.innerHTML = '';
+  emptyMsg.style.display = pageDocs.length === 0 ? 'block' : 'none';
+
+  pageDocs.forEach((doc) => {
     const tr = document.createElement('tr');
     const maskedNote = doc.inspection_amount_masked
       ? '<span class="masked">(定額)</span>'
       : '';
     if (doc.image_url) {
       tr.classList.add('clickable-row');
-      tr.title = '画像を新しいタブで開く';
-      tr.addEventListener('click', () => window.open(doc.image_url, '_blank', 'noopener'));
+      tr.title = '画像を表示';
+      tr.addEventListener('click', () => openImageModal(doc.image_url));
     }
     tr.innerHTML = `
       <td>${codeSummary(doc)}</td>
