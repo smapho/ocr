@@ -7,9 +7,14 @@ create table if not exists ocr_documents (
 
   issue_date date,
   target_period text,
+  -- 左上4段のコード番号(2桁+3桁+2桁+2桁)
+  company_code text,
   company_name text,
+  division_code text,
   division_name text,
+  branch_code text,
   branch_name text,
+  store_code text,
   store_name text,
   document_type text,
 
@@ -36,6 +41,8 @@ create table if not exists ocr_documents (
   bank_info text,
   approval_no text,
   inspection_date date,
+  -- 振込専用用紙欄の数字
+  remittance_form text,
   -- 手書きの変更理由欄
   change_reason text,
   other_notes text,

@@ -94,6 +94,13 @@
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
   th { color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .clickable-row { cursor: pointer; }
+  .clickable-row:hover { background: var(--bg); }
+  .delete-btn {
+    margin-top: 0; padding: 4px 10px; font-size: 12px;
+    background: transparent; color: var(--err); border: 1px solid var(--err);
+  }
+  .delete-btn:hover { background: var(--err); color: #fff; }
   .masked { color: var(--warn); font-size: 12px; display: block; }
   .thumb { width: 48px; height: 48px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
   .thumb-fallback {
@@ -132,14 +139,21 @@
       <table>
         <thead>
           <tr>
-            <th>画像</th>
+            <th>コード</th>
             <th>対象年月</th>
             <th>取引先</th>
             <th>経費項目</th>
             <th>事前承認金額</th>
             <th>検収金額</th>
+            <th>税率</th>
+            <th>検収月日</th>
+            <th>支払予定日</th>
+            <th>支払方法</th>
+            <th>振込専用用紙</th>
             <th>変更理由(手書き)</th>
             <th>承認NO</th>
+            <th>取込日</th>
+            <th></th>
           </tr>
         </thead>
         <tbody id="docTableBody"></tbody>

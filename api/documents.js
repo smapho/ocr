@@ -6,6 +6,37 @@ const supabase = createClient(
 );
 
 export default async function handler(req, res) {
+  if (req.method === 'DELETE') {
+    const id = req.query?.id;
+    if (!id) {
+      res.status(400).json({ error: 'id は必須です' });
+      return;
+    }
+
+    const { data: doc, error: fetchError } = await supabase
+      .from('ocr_documents')
+      .select('storage_path')
+      .eq('id', id)
+      .single();
+    if (fetchError) {
+      res.status(404).json({ error: '対象のデータが見つかりません' });
+      return;
+    }
+
+    if (doc.storage_path) {
+      await supabase.storage.from('ocr-images').remove([doc.storage_path]);
+    }
+
+    const { error: deleteError } = await supabase.from('ocr_documents').delete().eq('id', id);
+    if (deleteError) {
+      res.status(500).json({ error: deleteError.message });
+      return;
+    }
+
+    res.status(200).json({ ok: true });
+    return;
+  }
+
   if (req.method !== 'GET') {
     res.status(405).json({ error: 'Method not allowed' });
     return;

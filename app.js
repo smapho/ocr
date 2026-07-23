@@ -264,6 +264,34 @@ function yen(n) {
   return `¥${Number(n).toLocaleString('ja-JP')}`;
 }
 
+function percent(n) {
+  return n === null || n === undefined ? '-' : `${n}%`;
+}
+
+function codeSummary(doc) {
+  const codes = [doc.company_code, doc.division_code, doc.branch_code, doc.store_code].filter(
+    (c) => c !== null && c !== undefined && c !== ''
+  );
+  return codes.length ? codes.join('-') : '-';
+}
+
+function formatDateTime(iso) {
+  if (!iso) return '-';
+  return new Date(iso).toLocaleString('ja-JP', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+async function deleteDocument(id) {
+  const res = await fetch(`/api/documents?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || '削除に失敗しました');
+}
+
 async function loadDocuments() {
   const res = await fetch('/api/documents');
   const json = await res.json();
@@ -276,16 +304,42 @@ async function loadDocuments() {
     const maskedNote = doc.inspection_amount_masked
       ? '<span class="masked">(定額)</span>'
       : '';
+    if (doc.image_url) {
+      tr.classList.add('clickable-row');
+      tr.title = '画像を新しいタブで開く';
+      tr.addEventListener('click', () => window.open(doc.image_url, '_blank', 'noopener'));
+    }
     tr.innerHTML = `
-      <td>${doc.image_url ? `<img class="thumb" src="${doc.image_url}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'thumb-fallback',textContent:'📄'}))" />` : '-'}</td>
+      <td>${codeSummary(doc)}</td>
       <td>${doc.target_period || '-'}</td>
       <td>${doc.vendor_name || '-'}</td>
       <td>${doc.expense_item_name || '-'}</td>
       <td>${yen(doc.pre_approved_amount)}</td>
       <td>${yen(doc.inspection_amount)}${maskedNote}</td>
+      <td>${percent(doc.tax_rate)}</td>
+      <td>${doc.inspection_date || '-'}</td>
+      <td>${doc.payment_due_date || '-'}</td>
+      <td>${doc.payment_method || '-'}</td>
+      <td>${doc.remittance_form ?? '-'}</td>
       <td>${doc.change_reason || '-'}</td>
       <td>${doc.approval_no || '-'}</td>
+      <td>${formatDateTime(doc.created_at)}</td>
+      <td><button type="button" class="delete-btn" data-id="${doc.id}">削除</button></td>
     `;
+    const deleteBtn = tr.querySelector('.delete-btn');
+    deleteBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!window.confirm('このデータを削除しますか?(元画像も削除されます)')) return;
+      deleteBtn.disabled = true;
+      try {
+        await deleteDocument(doc.id);
+        await loadDocuments();
+      } catch (err) {
+        console.error(err);
+        window.alert(err.message || '削除に失敗しました');
+        deleteBtn.disabled = false;
+      }
+    });
     docTableBody.appendChild(tr);
   });
 }
