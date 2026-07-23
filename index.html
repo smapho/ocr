@@ -49,6 +49,16 @@
   .pick-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
   .pick-row button { margin-top: 0; }
   .pick-note { font-size: 12px; color: var(--muted); }
+  .search-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .search-row input {
+    padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); font-size: 13px;
+  }
+  .search-row button { margin-top: 0; }
+  .secondary-btn {
+    background: transparent; color: var(--text); border: 1px solid var(--border);
+  }
+  .secondary-btn:hover { background: var(--bg); }
   .drop {
     border: 2px dashed var(--border);
     border-radius: 8px;
@@ -134,7 +144,13 @@
   </div>
 
   <div class="panel">
-    <h2 style="font-size:15px; margin-top:0;">格納済みデータ</h2>
+    <h2 style="font-size:15px; margin-top:0;">取り込みデータ</h2>
+    <div class="search-row">
+      <input type="text" id="searchVendor" placeholder="取引先(部分一致)" />
+      <input type="date" id="searchDueDate" title="支払予定日" />
+      <input type="text" id="searchApprovalNo" placeholder="承認NO(部分一致)" />
+      <button type="button" id="searchClearBtn" class="secondary-btn">クリア</button>
+    </div>
     <div class="table-wrap">
       <table>
         <thead>

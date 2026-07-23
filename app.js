@@ -18,6 +18,10 @@ const emptyMsg = document.getElementById('emptyMsg');
 const progressWrap = document.getElementById('progressWrap');
 const progressFill = document.getElementById('progressFill');
 const progressLabel = document.getElementById('progressLabel');
+const searchVendor = document.getElementById('searchVendor');
+const searchDueDate = document.getElementById('searchDueDate');
+const searchApprovalNo = document.getElementById('searchApprovalNo');
+const searchClearBtn = document.getElementById('searchClearBtn');
 
 const MAX_DIMENSION = 1800;
 const JPEG_QUALITY = 0.85;
@@ -292,10 +296,40 @@ async function deleteDocument(id) {
   if (!res.ok) throw new Error(json.error || '削除に失敗しました');
 }
 
+let allDocuments = [];
+
+function applyFilters() {
+  const vendorQuery = searchVendor.value.trim().toLowerCase();
+  const approvalQuery = searchApprovalNo.value.trim().toLowerCase();
+  const dueDate = searchDueDate.value;
+
+  const filtered = allDocuments.filter((doc) => {
+    if (vendorQuery && !(doc.vendor_name || '').toLowerCase().includes(vendorQuery)) return false;
+    if (approvalQuery && !(doc.approval_no || '').toLowerCase().includes(approvalQuery)) return false;
+    if (dueDate && doc.payment_due_date !== dueDate) return false;
+    return true;
+  });
+
+  renderDocuments(filtered);
+}
+
+[searchVendor, searchApprovalNo].forEach((el) => el.addEventListener('input', applyFilters));
+searchDueDate.addEventListener('change', applyFilters);
+searchClearBtn.addEventListener('click', () => {
+  searchVendor.value = '';
+  searchApprovalNo.value = '';
+  searchDueDate.value = '';
+  applyFilters();
+});
+
 async function loadDocuments() {
   const res = await fetch('/api/documents');
   const json = await res.json();
-  const docs = json.documents || [];
+  allDocuments = json.documents || [];
+  applyFilters();
+}
+
+function renderDocuments(docs) {
   docTableBody.innerHTML = '';
   emptyMsg.style.display = docs.length === 0 ? 'block' : 'none';
 
