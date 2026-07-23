@@ -453,7 +453,10 @@ function renderDocuments() {
       deleteBtn.disabled = true;
       try {
         await deleteDocument(doc.id);
-        await loadDocuments();
+        // 削除後に全件を再取得すると行ごとに署名付きURLを再発行し直すため遅い。
+        // 成功が確定しているので手元のリストから即座に取り除いて再描画する。
+        allDocuments = allDocuments.filter((d) => d.id !== doc.id);
+        applyFilters();
       } catch (err) {
         console.error(err);
         window.alert(err.message || '削除に失敗しました');
