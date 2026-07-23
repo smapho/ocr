@@ -69,17 +69,24 @@ function setFileStatus(i, status, label, errorDetail) {
   if (errorEl) errorEl.textContent = errorDetail || '';
 }
 
-// 画像を最大辺 MAX_DIMENSION に縮小し、base64(JPEG)に変換する
-async function resizeToBase64(file) {
-  let source = file;
+function readAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => resolve(e.target.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// アップロード用データを準備する。
+// HEIC/HEIFはブラウザのcanvasで直接デコードできず変換ライブラリも一部の
+// バリエーション(HDR gain map付きなど)に対応できないため、変換せず
+// 生のまま送る(Gemini APIはimage/heic・image/heifをネイティブにサポートしている)。
+// それ以外の画像は最大辺 MAX_DIMENSION に縮小してJPEG化し、転送量を減らす。
+async function prepareUpload(file) {
   if (isHeic(file)) {
-    if (typeof window.heic2any !== 'function') {
-      throw new Error('HEIC変換ライブラリの読み込みに失敗しました(通信環境を確認してください)');
-    }
-    // HEIC/HEIFはブラウザのcanvasで直接デコードできないため、先にJPEGへ変換する
-    const converted = await window.heic2any({ blob: file, toType: 'image/jpeg', quality: JPEG_QUALITY });
-    // Live Photo等、複数画像を含むHEICでは配列が返ることがあるため先頭を使う
-    source = Array.isArray(converted) ? converted[0] : converted;
+    const mimeType = /\.heif$/i.test(file.name) ? 'image/heif' : 'image/heic';
+    return { mimeType, imageBase64: await readAsBase64(file) };
   }
 
   return new Promise((resolve, reject) => {
@@ -95,13 +102,13 @@ async function resizeToBase64(file) {
         canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
         const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
-        resolve(dataUrl.split(',')[1]);
+        resolve({ mimeType: 'image/jpeg', imageBase64: dataUrl.split(',')[1] });
       };
       img.onerror = reject;
       img.src = e.target.result;
     };
     reader.onerror = reject;
-    reader.readAsDataURL(source);
+    reader.readAsDataURL(file);
   });
 }
 
@@ -115,11 +122,11 @@ async function processOne(i) {
   const file = selectedFiles[i];
   setFileStatus(i, 'processing', '処理中');
   try {
-    const imageBase64 = await resizeToBase64(file);
+    const { mimeType, imageBase64 } = await prepareUpload(file);
     const res = await fetch('/api/ingest', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileName: file.name, mimeType: 'image/jpeg', imageBase64 }),
+      body: JSON.stringify({ fileName: file.name, mimeType, imageBase64 }),
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || '取り込みに失敗しました');
@@ -176,7 +183,7 @@ async function loadDocuments() {
       ? '<span class="masked">(マスクのため事前承認金額を採用)</span>'
       : '';
     tr.innerHTML = `
-      <td>${doc.image_url ? `<img class="thumb" src="${doc.image_url}" alt="" />` : '-'}</td>
+      <td>${doc.image_url ? `<img class="thumb" src="${doc.image_url}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'thumb-fallback',textContent:'📄'}))" />` : '-'}</td>
       <td>${doc.target_period || '-'}</td>
       <td>${doc.vendor_name || '-'}</td>
       <td>${doc.expense_item_name || '-'}</td>
