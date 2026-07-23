@@ -340,7 +340,8 @@ function codeSummary(doc) {
 
 function formatDateTime(iso) {
   if (!iso) return '-';
-  return new Date(iso).toLocaleString('ja-JP', {
+  const d = new Date(iso);
+  const base = d.toLocaleString('ja-JP', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -348,6 +349,10 @@ function formatDateTime(iso) {
     minute: '2-digit',
     second: '2-digit',
   });
+  // 複数枚を同時処理すると同じ秒に収まることがあるため、ミリ秒まで表示して
+  // 画像ごとにOCRが完了した時刻(=DBへ格納した時刻)を区別できるようにする
+  const ms = String(d.getMilliseconds()).padStart(3, '0');
+  return `${base}.${ms}`;
 }
 
 async function deleteDocument(id) {
